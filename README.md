@@ -111,6 +111,43 @@ python bot.py
 | `requirements.txt`, `Dockerfile`, `docker-compose.yml` | Сборка/запуск |
 | `tests/` | Минимальные unit-тесты для маппинга |
 
+## Диагностика
+
+### `telegram.error.TimedOut` при старте
+
+Бот падает с `telegram.error.TimedOut` внутри `Application.initialize → bot.get_me`,
+если контейнер не может достучаться до `api.telegram.org`. Что проверить на VPS:
+
+1. **Интернет и DNS:**
+   ```bash
+   docker compose exec bot sh -c "getent hosts api.telegram.org && \
+     wget -qO- https://api.telegram.org/ >/dev/null && echo OK"
+   ```
+2. **Достижимость Telegram Bot API** (в РФ часто блокируется): если предыдущий
+   шаг падает по таймауту, нужен прокси.
+3. **Настроить прокси** в `.env`:
+   ```env
+   TELEGRAM_PROXY_URL=socks5://user:pass@proxy.example.com:1080
+   # или http://user:pass@proxy.example.com:8080
+   ```
+   SOCKS-зависимости уже подключены в `requirements.txt`
+   (`python-telegram-bot[socks]`).
+4. Перезапустить:
+   ```bash
+   docker compose up -d --build
+   docker compose logs -f
+   ```
+
+В логах при старте видно фактические таймауты и факт наличия прокси
+(без учётных данных), например:
+
+```
+Telegram timeouts: connect=30.0s read=30.0s write=30.0s pool=30.0s; proxy=socks5://proxy.example.com:1080; get_updates_proxy=socks5://proxy.example.com:1080
+```
+
+Бот при сетевой ошибке старта **не выходит**, а повторяет попытку через
+`TELEGRAM_STARTUP_RETRY_DELAY` секунд (по умолчанию 15).
+
 ## Тесты
 
 ```bash

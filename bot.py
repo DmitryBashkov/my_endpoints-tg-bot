@@ -6,11 +6,14 @@ import json
 import logging
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
+from telegram.error import NetworkError, TimedOut
 from telegram.ext import (
     Application,
+    ApplicationBuilder,
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
@@ -223,8 +226,37 @@ async def cmd_unknown(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.message.reply_text("Пришли фото контакта или /health.")
 
 
+def _safe_proxy_display(url: str) -> str:
+    if not url:
+        return "(none)"
+    try:
+        p = urlparse(url)
+        host = p.hostname or "?"
+        port = f":{p.port}" if p.port else ""
+        return f"{p.scheme}://{host}{port}"
+    except Exception:
+        return "(set)"
+
+
 def build_application(cfg: Config) -> Application:
-    app = Application.builder().token(cfg.telegram_bot_token).build()
+    builder: ApplicationBuilder = (
+        Application.builder()
+        .token(cfg.telegram_bot_token)
+        .connect_timeout(cfg.telegram_connect_timeout)
+        .read_timeout(cfg.telegram_read_timeout)
+        .write_timeout(cfg.telegram_write_timeout)
+        .pool_timeout(cfg.telegram_pool_timeout)
+        .get_updates_connect_timeout(cfg.telegram_connect_timeout)
+        .get_updates_read_timeout(cfg.telegram_read_timeout)
+        .get_updates_write_timeout(cfg.telegram_write_timeout)
+        .get_updates_pool_timeout(cfg.telegram_pool_timeout)
+    )
+    if cfg.telegram_proxy_url:
+        builder = builder.proxy(cfg.telegram_proxy_url)
+    if cfg.telegram_get_updates_proxy_url:
+        builder = builder.get_updates_proxy(cfg.telegram_get_updates_proxy_url)
+
+    app = builder.build()
     app.bot_data["cfg"] = cfg
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("health", cmd_health))
@@ -252,8 +284,41 @@ def main() -> None:
         cfg.my_endpoints_base_url or "(не задан)",
         cfg.openrouter_model or "(не задан)",
     )
-    app = build_application(cfg)
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    log.info(
+        "Telegram timeouts: connect=%.1fs read=%.1fs write=%.1fs pool=%.1fs; "
+        "proxy=%s; get_updates_proxy=%s",
+        cfg.telegram_connect_timeout,
+        cfg.telegram_read_timeout,
+        cfg.telegram_write_timeout,
+        cfg.telegram_pool_timeout,
+        _safe_proxy_display(cfg.telegram_proxy_url),
+        _safe_proxy_display(cfg.telegram_get_updates_proxy_url),
+    )
+
+    delay = max(1.0, cfg.telegram_startup_retry_delay)
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            app = build_application(cfg)
+            app.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                bootstrap_retries=-1,
+            )
+            return
+        except (TimedOut, NetworkError) as e:
+            log.error(
+                "Startup network error (attempt %d): %s. "
+                "Сетевая ошибка при старте, повтор через %.0f с. "
+                "Check VPS DNS / Telegram API reachability / TELEGRAM_PROXY_URL.",
+                attempt,
+                e,
+                delay,
+            )
+            time.sleep(delay)
+        except KeyboardInterrupt:
+            log.info("Interrupted, exiting.")
+            return
 
 
 if __name__ == "__main__":
