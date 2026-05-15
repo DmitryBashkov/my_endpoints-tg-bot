@@ -1,0 +1,8 @@
+services:
+  bot:
+    build: .
+    image: my-endpoints-telegram-ingest-bot:latest
+    container_name: my-endpoints-telegram-ingest-bot
+    restart: unless-stopped
+    env_file:
+      - .env
