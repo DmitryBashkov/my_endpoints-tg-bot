@@ -22,6 +22,13 @@ EXTRACTION_PROMPT = (
 )
 
 
+def _shorten(text: str, limit: int = 500) -> str:
+    text = text or ""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "…"
+
+
 def _strip_fences(text: str) -> str:
     text = text.strip()
     if text.startswith("```"):
@@ -40,7 +47,54 @@ def _extract_json(text: str) -> dict[str, Any]:
     match = re.search(r"\{[\s\S]*\}", cleaned)
     if match:
         return json.loads(match.group(0))
-    raise ValueError("Не удалось распарсить JSON из ответа модели")
+    raise ValueError(
+        f"Не удалось распарсить JSON из ответа модели. Содержимое: {_shorten(text)!r}"
+    )
+
+
+def parse_openrouter_response(resp: httpx.Response) -> dict[str, Any]:
+    """Parse an OpenRouter chat-completions Response into the extracted contact dict.
+
+    Raises with status code and a short raw body on any failure, so the caller
+    never has to stringify the Response object itself (which would render as
+    `<Response [200 OK]>` and hide the actual payload).
+    """
+    status = resp.status_code
+    raw_text = resp.text or ""
+
+    if not (200 <= status < 300):
+        raise RuntimeError(
+            f"OpenRouter HTTP {status}: {_shorten(raw_text)}"
+        )
+
+    try:
+        payload = resp.json()
+    except ValueError as e:
+        raise ValueError(
+            f"OpenRouter HTTP {status}: ответ не является JSON. Тело: {_shorten(raw_text)!r}"
+        ) from e
+
+    try:
+        content = payload["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as e:
+        raise ValueError(
+            f"Неожиданный формат ответа OpenRouter (HTTP {status}): "
+            f"{_shorten(json.dumps(payload, ensure_ascii=False))}"
+        ) from e
+
+    if isinstance(content, list):
+        text_parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                text_parts.append(item.get("text", ""))
+        content = "\n".join(text_parts)
+
+    if not isinstance(content, str):
+        raise ValueError(
+            f"OpenRouter вернул content не-строкой: {type(content).__name__}"
+        )
+
+    return _extract_json(content)
 
 
 async def extract_contact_from_image(
@@ -85,19 +139,5 @@ async def extract_contact_from_image(
             headers=headers,
             json=payload,
         )
-        resp.raise_for_status()
-        data = resp.json()
 
-    try:
-        content = data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError) as e:
-        raise ValueError(f"Неожиданный формат ответа OpenRouter: {data}") from e
-
-    if isinstance(content, list):
-        text_parts: list[str] = []
-        for item in content:
-            if isinstance(item, dict) and item.get("type") == "text":
-                text_parts.append(item.get("text", ""))
-        content = "\n".join(text_parts)
-
-    return _extract_json(content)
+    return parse_openrouter_response(resp)
