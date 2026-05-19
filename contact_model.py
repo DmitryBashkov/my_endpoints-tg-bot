@@ -125,7 +125,7 @@ def build_canonical_contact(extracted: dict[str, Any]) -> dict[str, Any]:
         }
     ]
 
-    note = _s(extracted.get("notes")) or "Импортировано из изображения через Telegram-бота"
+    note = _s(extracted.get("notes")) or "Imported from image via Telegram bot"
     quick_notes = [{"date": today, "note": note}]
 
     prefered = ""
@@ -186,7 +186,7 @@ def build_canonical_contact(extracted: dict[str, Any]) -> dict[str, Any]:
 
 def short_preview(canonical: dict[str, Any]) -> str:
     person = canonical.get("person", {})
-    name = person.get("name", {}).get("full_name", "") or "(без имени)"
+    name = person.get("name", {}).get("full_name", "") or "(no name)"
     cd = person.get("contact-details", {})
     phones = cd.get("phone", {})
     mobile = ", ".join(phones.get("mobile", []))
@@ -203,13 +203,13 @@ def short_preview(canonical: dict[str, Any]) -> str:
     if qn:
         note = qn[0].get("note", "")
 
-    lines = [f"<b>Имя:</b> {name}"]
+    lines = [f"<b>Name:</b> {name}"]
     if company or position:
-        lines.append(f"<b>Компания/должность:</b> {company} — {position}".rstrip(" —"))
+        lines.append(f"<b>Company/position:</b> {company} — {position}".rstrip(" —"))
     if mobile:
-        lines.append(f"<b>Моб:</b> {mobile}")
+        lines.append(f"<b>Mobile:</b> {mobile}")
     if work:
-        lines.append(f"<b>Раб:</b> {work}")
+        lines.append(f"<b>Work:</b> {work}")
     if email:
         lines.append(f"<b>Email:</b> {email}")
     if tg:
@@ -217,5 +217,5 @@ def short_preview(canonical: dict[str, Any]) -> str:
     if wa:
         lines.append(f"<b>WhatsApp:</b> {wa}")
     if note:
-        lines.append(f"<b>Заметка:</b> {note}")
+        lines.append(f"<b>Note:</b> {note}")
     return "\n".join(lines)
