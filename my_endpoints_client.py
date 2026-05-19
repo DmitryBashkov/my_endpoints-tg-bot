@@ -46,14 +46,14 @@ def parse_create_contact_response(resp: httpx.Response) -> tuple[bool, str, dict
 
 async def check_health(base_url: str, timeout: float = 10.0) -> tuple[bool, str]:
     if not base_url:
-        return False, "MY_ENDPOINTS_API_BASE_URL не задан"
+        return False, "MY_ENDPOINTS_API_BASE_URL is not set"
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.get(f"{base_url.rstrip('/')}/health")
         ok = 200 <= resp.status_code < 300
         return ok, f"HTTP {resp.status_code}: {_shorten(resp.text, 200)}"
     except httpx.HTTPError as e:
-        return False, f"Ошибка: {e}"
+        return False, f"Error: {e}"
 
 
 async def create_contact(
@@ -63,12 +63,12 @@ async def create_contact(
     timeout: float = 30.0,
 ) -> tuple[bool, str, dict[str, Any] | None]:
     if not base_url:
-        return False, "MY_ENDPOINTS_API_BASE_URL не задан", None
+        return False, "MY_ENDPOINTS_API_BASE_URL is not set", None
     url = f"{base_url.rstrip('/')}/api/v1/contacts"
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(url, headers=_headers(bearer_token), json={"data": contact})
     except httpx.HTTPError as e:
-        return False, f"Сетевая ошибка: {e}", None
+        return False, f"Network error: {e}", None
 
     return parse_create_contact_response(resp)
