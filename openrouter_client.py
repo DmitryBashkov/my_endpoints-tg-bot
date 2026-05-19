@@ -9,16 +9,16 @@ from typing import Any
 import httpx
 
 EXTRACTION_PROMPT = (
-    "Извлеки контактные данные с изображения (визитка, подпись email, фото контакта) "
-    "и верни СТРОГО JSON без пояснений и без markdown-обёрток. "
-    "Используй только эти ключи (опускай отсутствующие): "
+    "Extract contact details from the image (business card, email signature, contact photo) "
+    "and return STRICTLY JSON without explanations and without markdown wrappers. "
+    "Use only these keys (omit missing ones): "
     "full_name, first_name, middle_name, last_name, gender, "
     "company, position, address, city, country, "
     "phone_mobile (list of strings), phone_work (list), phone_home (list), phones (list), "
     "email, emails (list), telegram, whatsapp, website, websites (list), "
-    "notes, raw_text (list of строк с любым другим текстом с изображения). "
-    "Телефоны — в международном формате если возможно. Telegram — без @. "
-    "Если поле не найдено — НЕ включай ключ. Верни только JSON-объект."
+    "notes, raw_text (list of strings with any other text from the image). "
+    "Phone numbers — in international format if possible. Telegram — without @. "
+    "If a field is not found — do NOT include the key. Return only the JSON object."
 )
 
 
@@ -48,7 +48,7 @@ def _extract_json(text: str) -> dict[str, Any]:
     if match:
         return json.loads(match.group(0))
     raise ValueError(
-        f"Не удалось распарсить JSON из ответа модели. Содержимое: {_shorten(text)!r}"
+        f"Failed to parse JSON from model response. Content: {_shorten(text)!r}"
     )
 
 
@@ -71,14 +71,14 @@ def parse_openrouter_response(resp: httpx.Response) -> dict[str, Any]:
         payload = resp.json()
     except ValueError as e:
         raise ValueError(
-            f"OpenRouter HTTP {status}: ответ не является JSON. Тело: {_shorten(raw_text)!r}"
+            f"OpenRouter HTTP {status}: response is not valid JSON. Body: {_shorten(raw_text)!r}"
         ) from e
 
     try:
         content = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as e:
         raise ValueError(
-            f"Неожиданный формат ответа OpenRouter (HTTP {status}): "
+            f"Unexpected OpenRouter response format (HTTP {status}): "
             f"{_shorten(json.dumps(payload, ensure_ascii=False))}"
         ) from e
 
@@ -91,7 +91,7 @@ def parse_openrouter_response(resp: httpx.Response) -> dict[str, Any]:
 
     if not isinstance(content, str):
         raise ValueError(
-            f"OpenRouter вернул content не-строкой: {type(content).__name__}"
+            f"OpenRouter returned content that is not a string: {type(content).__name__}"
         )
 
     return _extract_json(content)
@@ -106,9 +106,9 @@ async def extract_contact_from_image(
     timeout: float = 60.0,
 ) -> dict[str, Any]:
     if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY не задан")
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
     if not model:
-        raise RuntimeError("OPENROUTER_MODEL не задан")
+        raise RuntimeError("OPENROUTER_MODEL is not set")
 
     b64 = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{mime_type};base64,{b64}"
