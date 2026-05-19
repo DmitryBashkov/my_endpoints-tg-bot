@@ -53,8 +53,8 @@ def _confirm_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Сохранить", callback_data="save"),
-                InlineKeyboardButton("❌ Отмена", callback_data="cancel"),
+                InlineKeyboardButton("✅ Save", callback_data="save"),
+                InlineKeyboardButton("❌ Cancel", callback_data="cancel"),
             ],
             [InlineKeyboardButton("📄 JSON", callback_data="json")],
         ]
@@ -65,13 +65,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cfg: Config = context.application.bot_data["cfg"]
     user = update.effective_user
     if not user or not _is_allowed(cfg, user.id):
-        await update.message.reply_text("Доступ запрещён.")
+        await update.message.reply_text("Access denied.")
         log.warning("Denied /start from user_id=%s", user.id if user else "?")
         return
     await update.message.reply_text(
-        "Привет! Пришли фото визитки или подписи email — извлеку контакт и "
-        "перед сохранением покажу превью для подтверждения.\n\n"
-        "Команды: /health — проверка сервисов."
+        "Hello! Send a photo of a business card or email signature — I'll extract the contact and "
+        "show you a preview for confirmation before saving.\n\n"
+        "Commands: /health — check services."
     )
 
 
@@ -79,7 +79,7 @@ async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     cfg: Config = context.application.bot_data["cfg"]
     user = update.effective_user
     if not user or not _is_allowed(cfg, user.id):
-        await update.message.reply_text("Доступ запрещён.")
+        await update.message.reply_text("Access denied.")
         return
 
     ok, msg = await check_health(cfg.my_endpoints_base_url, timeout=cfg.http_timeout)
@@ -87,8 +87,8 @@ async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     lines = [
         f"my_endpoints: {'✅' if ok else '❌'} {msg}",
         f"OpenRouter env: {'✅' if or_ok else '❌'} "
-        f"(key {'есть' if cfg.openrouter_api_key else 'нет'}, "
-        f"model {'есть' if cfg.openrouter_model else 'нет'})",
+        f"(key {'set' if cfg.openrouter_api_key else 'missing'}, "
+        f"model {'set' if cfg.openrouter_model else 'missing'})",
     ]
     await update.message.reply_text("\n".join(lines))
 
@@ -98,7 +98,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user = update.effective_user
     if not user or not _is_allowed(cfg, user.id):
         if update.message:
-            await update.message.reply_text("Доступ запрещён.")
+            await update.message.reply_text("Access denied.")
         log.warning("Denied image from user_id=%s", user.id if user else "?")
         return
 
@@ -117,10 +117,10 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         mime_type = msg.document.mime_type or "image/jpeg"
 
     if not file_id:
-        await msg.reply_text("Пришли изображение (фото или файл-картинку).")
+        await msg.reply_text("Please send an image (photo or image file).")
         return
 
-    status = await msg.reply_text("⏳ Распознаю контакт…")
+    status = await msg.reply_text("⏳ Extracting contact…")
     try:
         tg_file = await context.bot.get_file(file_id)
         buf = io.BytesIO()
@@ -128,7 +128,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         image_bytes = buf.getvalue()
     except Exception as e:
         log.exception("Failed to download image")
-        await status.edit_text(f"Не удалось скачать изображение: {e}")
+        await status.edit_text(f"Failed to download image: {e}")
         return
 
     try:
@@ -142,7 +142,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
     except Exception as e:
         log.exception("OpenRouter extraction failed")
-        await status.edit_text(f"Ошибка извлечения: {e}")
+        await status.edit_text(f"Extraction error: {e}")
         return
 
     canonical = build_canonical_contact(extracted)
@@ -150,7 +150,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     preview = short_preview(canonical)
     await status.edit_text(
-        f"Найден контакт:\n\n{preview}\n\nСохранить в базу?",
+        f"Contact found:\n\n{preview}\n\nSave to database?",
         parse_mode=ParseMode.HTML,
         reply_markup=_confirm_keyboard(),
     )
@@ -172,7 +172,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     user_id = query.from_user.id
     if not _is_allowed(cfg, user_id):
-        await query.answer("Доступ запрещён.", show_alert=True)
+        await query.answer("Access denied.", show_alert=True)
         return
 
     await query.answer()
@@ -181,11 +181,11 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if action == "cancel":
         DRAFTS.pop(user_id, None)
-        await query.edit_message_text("Отменено. Черновик удалён.")
+        await query.edit_message_text("Cancelled. Draft deleted.")
         return
 
     if not draft:
-        await query.edit_message_text("Черновик не найден или истёк. Пришли изображение снова.")
+        await query.edit_message_text("Draft not found or expired. Please send an image again.")
         return
 
     contact = draft["contact"]
@@ -212,9 +212,9 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 )
             suffix = f"\nuuid: {uid}" if uid else ""
             DRAFTS.pop(user_id, None)
-            await query.edit_message_text(f"✅ Сохранено. {msg}{suffix}")
+            await query.edit_message_text(f"✅ Saved. {msg}{suffix}")
         else:
-            await query.edit_message_text(f"❌ Не удалось сохранить.\n{msg}")
+            await query.edit_message_text(f"❌ Failed to save.\n{msg}")
         return
 
 
@@ -223,7 +223,7 @@ async def cmd_unknown(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user = update.effective_user
     if not user or not _is_allowed(cfg, user.id):
         return
-    await update.message.reply_text("Пришли фото контакта или /health.")
+    await update.message.reply_text("Send a contact photo or use /health.")
 
 
 def _safe_proxy_display(url: str) -> str:
@@ -272,17 +272,17 @@ def build_application(cfg: Config) -> Application:
 def main() -> None:
     cfg = load_config()
     if not cfg.telegram_bot_token:
-        raise SystemExit("TELEGRAM_BOT_TOKEN не задан")
+        raise SystemExit("TELEGRAM_BOT_TOKEN is not set")
     if not cfg.allowed_user_ids:
         log.warning(
-            "TELEGRAM_ALLOWED_USER_IDS пуст — бот отклонит ВСЕХ пользователей. "
-            "Задай список ID в .env."
+            "TELEGRAM_ALLOWED_USER_IDS is empty — the bot will reject ALL users. "
+            "Set the list of IDs in .env."
         )
     log.info(
         "Starting bot. allowlist=%d users, my_endpoints=%s, model=%s",
         len(cfg.allowed_user_ids),
-        cfg.my_endpoints_base_url or "(не задан)",
-        cfg.openrouter_model or "(не задан)",
+        cfg.my_endpoints_base_url or "(not set)",
+        cfg.openrouter_model or "(not set)",
     )
     log.info(
         "Telegram timeouts: connect=%.1fs read=%.1fs write=%.1fs pool=%.1fs; "
@@ -309,7 +309,7 @@ def main() -> None:
         except (TimedOut, NetworkError) as e:
             log.error(
                 "Startup network error (attempt %d): %s. "
-                "Сетевая ошибка при старте, повтор через %.0f с. "
+                "Retrying in %.0f s. "
                 "Check VPS DNS / Telegram API reachability / TELEGRAM_PROXY_URL.",
                 attempt,
                 e,
